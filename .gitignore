@@ -1,0 +1,18 @@
+# Build output
+mojave_amd64/
+
+# Cloned upstream source
+src/
+
+# Python virtual environment
+venv/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
