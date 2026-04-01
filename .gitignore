@@ -8,6 +8,10 @@ src/
 venv/
 .venv/
 
+# Environment variables
+.env
+.env.*
+
 # OS files
 .DS_Store
 Thumbs.db

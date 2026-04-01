@@ -52,19 +52,24 @@ echo ""
 # - osusergo,netgo tags ensure pure Go implementations for user/net packages
 export MACOSX_DEPLOYMENT_TARGET=10.14
 
-BUILDFLAGS="-tags osusergo,netgo"
+OVERLAY="$HOME/tailscale-build/mojave_amd64/overlay.json"
 LDFLAGS="-s -w -X tailscale.com/version.longStamp=${VERSION} -X tailscale.com/version.shortStamp=${VERSION}"
+
+# Clear Go build cache to ensure overlay takes effect
+go clean -cache
 
 echo "[INFO] Building tailscaled (daemon)..."
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-    "${BUILDFLAGS}" \
+    -overlay "$OVERLAY" \
+    -tags osusergo,netgo \
     -o "$OUTPUT_DIR/tailscaled" \
     -ldflags "${LDFLAGS}" \
     ./cmd/tailscaled
 
 echo "[INFO] Building tailscale (CLI)..."
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-    "${BUILDFLAGS}" \
+    -overlay "$OVERLAY" \
+    -tags osusergo,netgo \
     -o "$OUTPUT_DIR/tailscale" \
     -ldflags "${LDFLAGS}" \
     ./cmd/tailscale
