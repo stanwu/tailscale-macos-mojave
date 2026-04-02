@@ -12,7 +12,7 @@ permissions:
 
 env:
   VERSION: v1.76.3
-  GO_VERSION: '1.23'
+  GO_VERSION: '1.26'
 
 jobs:
   build:

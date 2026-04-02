@@ -73,7 +73,7 @@ for i := 0; i < certCount; i++ {
 
 ## Prerequisites
 
-- Go >= 1.23
+- Go >= 1.26
 - git
 - Linux build host (cross-compile)
 
