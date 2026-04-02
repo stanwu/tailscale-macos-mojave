@@ -19,6 +19,7 @@ GO_ENV      := CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) MACOSX_D
 TAILSCALE   := $(OUTPUT_DIR)/tailscale
 TAILSCALED  := $(OUTPUT_DIR)/tailscaled
 BINARIES    := $(TAILSCALE) $(TAILSCALED)
+SPEC        := mach-o-header-symbols.json
 
 # Deploy target (override with: make deploy DEPLOY_HOST=user@host)
 DEPLOY_HOST ?= user@mojave-host
@@ -72,14 +73,8 @@ $(SRC_DIR)/go.mod:
 
 # ---- Verify ----
 
-verify: $(BINARIES)
-	@echo "=== Verify: SecTrustCopyCertificateChain should NOT appear ==="
-	@! strings $(TAILSCALE) | grep -q SecTrustCopyCertificateChain && \
-		echo "[OK] SecTrustCopyCertificateChain removed" || \
-		(echo "[FAIL] SecTrustCopyCertificateChain still present" && exit 1)
-	@strings $(TAILSCALE) | grep -q SecTrustGetCertificateAtIndex && \
-		echo "[OK] SecTrustGetCertificateAtIndex present" || \
-		(echo "[FAIL] SecTrustGetCertificateAtIndex missing" && exit 1)
+verify: $(BINARIES) $(SPEC)
+	@python3 scripts/verify_macho.py $(SPEC) $(TAILSCALE) $(TAILSCALED)
 
 # ---- Deploy ----
 
@@ -117,7 +112,7 @@ help:
 	@echo "Targets:"
 	@echo "  make              Build tailscale + tailscaled"
 	@echo "  make clone        Clone Tailscale source only"
-	@echo "  make verify       Check binary symbols are patched correctly"
+	@echo "  make verify       Verify Mach-O header + symbols against spec"
 	@echo "  make deploy       scp binaries to Mojave host"
 	@echo "  make clean        Remove binaries"
 	@echo "  make clean-cache  Remove binaries + Go build cache"

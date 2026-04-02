@@ -1,5 +1,11 @@
 # Tailscale v1.76.3 — macOS 10.14 Mojave Cross-Compile
 
+[![Build](https://github.com/stanwu/tailscale-macos-mojave/actions/workflows/build.yml/badge.svg)](https://github.com/stanwu/tailscale-macos-mojave/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/stanwu/tailscale-macos-mojave)](https://github.com/stanwu/tailscale-macos-mojave/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**[Download Latest Release](https://github.com/stanwu/tailscale-macos-mojave/releases/latest)**
+
 Cross-compile Tailscale static binaries (`tailscale` + `tailscaled`) for **macOS 10.14 Mojave (darwin/amd64)** on a Linux host.
 
 ## Why
@@ -103,12 +109,13 @@ go build -overlay "$OVERLAY" -tags osusergo,netgo \
 ### Verify
 
 ```bash
-# Confirm problematic symbol is gone
-strings tailscale | grep SecTrustCopyCertificateChain    # (no output = good)
-
-# Confirm new API is present
-strings tailscale | grep SecTrustGetCertificateAtIndex   # (should show)
+make verify
 ```
+
+This validates built binaries against `mach-o-header-symbols.json`, checking:
+- Mach-O header (magic, cputype, cpusubtype, filetype, flags)
+- Required symbols present (`SecTrustGetCertificateCount`, `SecTrustGetCertificateAtIndex`)
+- Forbidden symbols absent (`SecTrustCopyCertificateChain`)
 
 ## Deploy to Mojave
 
@@ -143,7 +150,9 @@ overlay/                                # Go stdlib patches (tracked in git)
   crypto/x509/
     root_darwin.go                      # Patched: count+index loop
 run_tailscale.sh                        # Startup helper for Mojave
-.github/workflows/build.yml            # CI: build + release on tag
+scripts/verify_macho.py                 # Mach-O header + symbol verification
+mach-o-header-symbols.json              # Reference spec for Mojave compatibility
+.github/workflows/build.yml            # CI: build + verify + release on tag
 mojave_amd64/                           # Build output (git-ignored)
 src/                                    # Cloned Tailscale source (git-ignored)
 ```
