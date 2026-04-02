@@ -32,12 +32,21 @@ jobs:
       - name: Generate overlay.json
         run: |
           GOROOT_SRC="$(go env GOROOT)/src"
-          OVERLAY_DIR="${GITHUB_WORKSPACE}/overlay"
+          GO_MINOR=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+' | cut -d. -f2)
+          if [ "$GO_MINOR" -ge 26 ]; then
+            GO_OVERLAY=go126
+            MACOS_PKG=macos
+          else
+            GO_OVERLAY=go123
+            MACOS_PKG=macOS
+          fi
+          OVERLAY_DIR="${GITHUB_WORKSPACE}/overlay/${GO_OVERLAY}"
+          echo "Go minor: ${GO_MINOR}, overlay: ${GO_OVERLAY}, package: ${MACOS_PKG}"
           cat > overlay.json <<EOF
           {
             "Replace": {
-              "${GOROOT_SRC}/crypto/x509/internal/macos/security.go": "${OVERLAY_DIR}/crypto/x509/internal/macos/security.go",
-              "${GOROOT_SRC}/crypto/x509/internal/macos/security.s": "${OVERLAY_DIR}/crypto/x509/internal/macos/security.s",
+              "${GOROOT_SRC}/crypto/x509/internal/${MACOS_PKG}/security.go": "${OVERLAY_DIR}/crypto/x509/internal/${MACOS_PKG}/security.go",
+              "${GOROOT_SRC}/crypto/x509/internal/${MACOS_PKG}/security.s": "${OVERLAY_DIR}/crypto/x509/internal/${MACOS_PKG}/security.s",
               "${GOROOT_SRC}/crypto/x509/root_darwin.go": "${OVERLAY_DIR}/crypto/x509/root_darwin.go"
             }
           }

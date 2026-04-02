@@ -73,11 +73,40 @@ for i := 0; i < certCount; i++ {
 
 ## Prerequisites
 
-- Go >= 1.26
+- Go 1.23+ (tested with 1.23 and 1.26)
 - git
+- Python 3 (for verification script)
 - Linux build host (cross-compile)
 
+## Go Version Compatibility
+
+Go 1.26 renamed the internal package `crypto/x509/internal/macOS` to `macos` (lowercase). This project provides **two sets of overlay files** that are automatically selected based on your Go version:
+
+| Go Version | Overlay | Package Name | Directory |
+|---|---|---|---|
+| 1.23 – 1.25 | `go123` | `macOS` (capital S) | `overlay/go123/` |
+| 1.26+ | `go126` | `macos` (lowercase) | `overlay/go126/` |
+
+The Makefile and CI auto-detect the Go version. To override manually:
+
+```bash
+make GO_OVERLAY=go123    # Force Go 1.23-1.25 overlay
+make GO_OVERLAY=go126    # Force Go 1.26+ overlay
+```
+
+Check detected version:
+
+```bash
+make check-go
+```
+
 ## Build
+
+```bash
+make
+```
+
+Or use the build script directly:
 
 ```bash
 ./build_tailscale-1.76.3_macOS_mojave.sh
@@ -85,34 +114,13 @@ for i := 0; i < certCount; i++ {
 
 Output binaries are written to `mojave_amd64/`.
 
-### Manual Build (with overlay)
-
-```bash
-cd src/tailscale
-go clean -cache
-
-export MACOSX_DEPLOYMENT_TARGET=10.14
-export CGO_ENABLED=0
-export GOOS=darwin
-export GOARCH=amd64
-
-OVERLAY="../../mojave_amd64/overlay.json"
-LDFLAGS="-s -w -X tailscale.com/version.longStamp=v1.76.3 -X tailscale.com/version.shortStamp=v1.76.3"
-
-go build -overlay "$OVERLAY" -tags osusergo,netgo \
-    -o ../../mojave_amd64/tailscaled -ldflags "$LDFLAGS" ./cmd/tailscaled
-
-go build -overlay "$OVERLAY" -tags osusergo,netgo \
-    -o ../../mojave_amd64/tailscale -ldflags "$LDFLAGS" ./cmd/tailscale
-```
-
 ### Verify
 
 ```bash
 make verify
 ```
 
-This validates built binaries against `mach-o-header-symbols.json`, checking:
+Validates built binaries against `mach-o-header-symbols.json`:
 - Mach-O header (magic, cputype, cpusubtype, filetype, flags)
 - Required symbols present (`SecTrustGetCertificateCount`, `SecTrustGetCertificateAtIndex`)
 - Forbidden symbols absent (`SecTrustCopyCertificateChain`)
@@ -150,6 +158,9 @@ overlay/                                # Go stdlib patches (tracked in git)
   crypto/x509/
     root_darwin.go                      # Patched: count+index loop
 run_tailscale.sh                        # Startup helper for Mojave
+overlay/                                # Go stdlib patches
+  go123/                                # For Go 1.23-1.25 (package macOS)
+  go126/                                # For Go 1.26+     (package macos)
 scripts/verify_macho.py                 # Mach-O header + symbol verification
 mach-o-header-symbols.json              # Reference spec for Mojave compatibility
 .github/workflows/build.yml            # CI: build + verify + release on tag

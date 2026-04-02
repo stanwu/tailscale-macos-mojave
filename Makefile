@@ -2,9 +2,6 @@ VERSION     := v1.76.3
 REPO        := https://github.com/tailscale/tailscale.git
 SRC_DIR     := src/tailscale
 OUTPUT_DIR  := mojave_amd64
-OVERLAY_DIR := $(CURDIR)/overlay
-OVERLAY     := $(OUTPUT_DIR)/overlay.json
-GOROOT_SRC  := $(shell go env GOROOT)/src
 
 GOOS        := darwin
 GOARCH      := amd64
@@ -20,30 +17,60 @@ TAILSCALE   := $(OUTPUT_DIR)/tailscale
 TAILSCALED  := $(OUTPUT_DIR)/tailscaled
 BINARIES    := $(TAILSCALE) $(TAILSCALED)
 SPEC        := mach-o-header-symbols.json
+OVERLAY     := $(OUTPUT_DIR)/overlay.json
+
+# --- Go version detection ---
+# Auto-detect Go major.minor version and select matching overlay.
+# Override with: make GO_OVERLAY=go123
+#
+# Go 1.26+: package name is "macos"  (lowercase) -> overlay/go126
+# Go 1.23-1.25: package name is "macOS" (capital S) -> overlay/go123
+GO_VER_RAW  := $(shell go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+GO_VER_MAJ  := $(word 1,$(subst ., ,$(GO_VER_RAW)))
+GO_VER_MIN  := $(word 2,$(subst ., ,$(GO_VER_RAW)))
+GO_OVERLAY  ?= $(shell [ "$(GO_VER_MIN)" -ge 26 ] 2>/dev/null && echo go126 || echo go123)
+OVERLAY_DIR := $(CURDIR)/overlay/$(GO_OVERLAY)
+GOROOT_SRC  := $(shell go env GOROOT)/src
+
+# Package subdir name differs between Go versions
+ifeq ($(GO_OVERLAY),go126)
+  MACOS_PKG := macos
+else
+  MACOS_PKG := macOS
+endif
 
 # Deploy target (override with: make deploy DEPLOY_HOST=user@host)
 DEPLOY_HOST ?= user@mojave-host
 DEPLOY_PATH ?= ~/
 
-.PHONY: all build clone clean clean-cache verify deploy setup help
+.PHONY: all build clone clean clean-cache clean-all verify deploy setup check-go help
 
 all: build
 
+# ---- Go version check ----
+
+check-go:
+	@echo "[INFO] Go version: $(GO_VER_RAW) -> overlay: $(GO_OVERLAY) (package: $(MACOS_PKG))"
+	@test -d "$(OVERLAY_DIR)" || \
+		(echo "[ERROR] Overlay directory not found: $(OVERLAY_DIR)" && \
+		 echo "        Available: $$(ls -d overlay/go* 2>/dev/null)" && \
+		 echo "        Override with: make GO_OVERLAY=go123" && exit 1)
+
 # ---- Build ----
 
-build: $(BINARIES)
+build: check-go $(BINARIES)
 	@echo ""
-	@echo "=== Build complete ==="
+	@echo "=== Build complete ($(GO_OVERLAY)) ==="
 	@ls -lh $(BINARIES)
 	@file $(BINARIES)
 
-$(OVERLAY): $(wildcard $(OVERLAY_DIR)/crypto/x509/internal/macos/*) $(wildcard $(OVERLAY_DIR)/crypto/x509/*)
+$(OVERLAY): check-go $(wildcard $(OVERLAY_DIR)/crypto/x509/internal/$(MACOS_PKG)/*) $(wildcard $(OVERLAY_DIR)/crypto/x509/*)
 	@mkdir -p $(OUTPUT_DIR)
-	@printf '{\n  "Replace": {\n    "%s/crypto/x509/internal/macos/security.go": "%s/crypto/x509/internal/macos/security.go",\n    "%s/crypto/x509/internal/macos/security.s": "%s/crypto/x509/internal/macos/security.s",\n    "%s/crypto/x509/root_darwin.go": "%s/crypto/x509/root_darwin.go"\n  }\n}\n' \
-		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" \
-		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" \
+	@printf '{\n  "Replace": {\n    "%s/crypto/x509/internal/%s/security.go": "%s/crypto/x509/internal/%s/security.go",\n    "%s/crypto/x509/internal/%s/security.s": "%s/crypto/x509/internal/%s/security.s",\n    "%s/crypto/x509/root_darwin.go": "%s/crypto/x509/root_darwin.go"\n  }\n}\n' \
+		"$(GOROOT_SRC)" "$(MACOS_PKG)" "$(OVERLAY_DIR)" "$(MACOS_PKG)" \
+		"$(GOROOT_SRC)" "$(MACOS_PKG)" "$(OVERLAY_DIR)" "$(MACOS_PKG)" \
 		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" > $@
-	@echo "[OK] Generated overlay.json"
+	@echo "[OK] Generated overlay.json ($(GO_OVERLAY), package: $(MACOS_PKG))"
 
 $(TAILSCALED): $(SRC_DIR)/go.mod $(OVERLAY)
 	@echo "[INFO] Building tailscaled (daemon)..."
@@ -80,14 +107,14 @@ verify: $(BINARIES) $(SPEC)
 
 deploy: $(BINARIES)
 	@echo "[INFO] Deploying to $(DEPLOY_HOST):$(DEPLOY_PATH)"
-	scp $(BINARIES) $(OUTPUT_DIR)/run_tailscale.sh $(DEPLOY_HOST):$(DEPLOY_PATH)
+	scp $(BINARIES) run_tailscale.sh $(DEPLOY_HOST):$(DEPLOY_PATH)
 	@echo "[OK] Deployed. Run on Mojave: sudo ./run_tailscale.sh"
 
 # ---- Clean ----
 
 clean:
-	rm -f $(BINARIES)
-	@echo "[OK] Binaries removed"
+	rm -f $(BINARIES) $(OVERLAY)
+	@echo "[OK] Binaries and overlay.json removed"
 
 clean-cache: clean
 	go clean -cache
@@ -109,16 +136,21 @@ setup:
 help:
 	@echo "Tailscale $(VERSION) macOS Mojave Cross-Compile"
 	@echo ""
+	@echo "  Detected Go: $(GO_VER_RAW) -> overlay: $(GO_OVERLAY)"
+	@echo ""
 	@echo "Targets:"
 	@echo "  make              Build tailscale + tailscaled"
 	@echo "  make clone        Clone Tailscale source only"
+	@echo "  make check-go     Show detected Go version and overlay"
 	@echo "  make verify       Verify Mach-O header + symbols against spec"
 	@echo "  make deploy       scp binaries to Mojave host"
-	@echo "  make clean        Remove binaries"
+	@echo "  make clean        Remove binaries + generated overlay.json"
 	@echo "  make clean-cache  Remove binaries + Go build cache"
 	@echo "  make clean-all    Remove binaries + cloned source"
 	@echo "  make setup        Create venv + install pre-commit"
 	@echo ""
 	@echo "Options:"
+	@echo "  GO_OVERLAY=go123       Force Go 1.23-1.25 overlay (package macOS)"
+	@echo "  GO_OVERLAY=go126       Force Go 1.26+ overlay    (package macos)"
 	@echo "  DEPLOY_HOST=user@host  Deploy target (default: user@mojave-host)"
 	@echo "  DEPLOY_PATH=~/dir      Remote path   (default: ~/)"
