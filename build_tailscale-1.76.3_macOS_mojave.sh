@@ -52,15 +52,30 @@ echo ""
 # - osusergo,netgo tags ensure pure Go implementations for user/net packages
 export MACOSX_DEPLOYMENT_TARGET=10.14
 
-OVERLAY="$HOME/tailscale-build/mojave_amd64/overlay.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OVERLAY_DIR="$SCRIPT_DIR/overlay"
+OVERLAY_JSON="$OUTPUT_DIR/overlay.json"
+GOROOT_SRC="$(go env GOROOT)/src"
 LDFLAGS="-s -w -X tailscale.com/version.longStamp=${VERSION} -X tailscale.com/version.shortStamp=${VERSION}"
+
+# Generate overlay.json with correct absolute paths
+cat > "$OVERLAY_JSON" <<EOJSON
+{
+  "Replace": {
+    "${GOROOT_SRC}/crypto/x509/internal/macos/security.go": "${OVERLAY_DIR}/crypto/x509/internal/macos/security.go",
+    "${GOROOT_SRC}/crypto/x509/internal/macos/security.s": "${OVERLAY_DIR}/crypto/x509/internal/macos/security.s",
+    "${GOROOT_SRC}/crypto/x509/root_darwin.go": "${OVERLAY_DIR}/crypto/x509/root_darwin.go"
+  }
+}
+EOJSON
+echo "[OK] Generated overlay.json"
 
 # Clear Go build cache to ensure overlay takes effect
 go clean -cache
 
 echo "[INFO] Building tailscaled (daemon)..."
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-    -overlay "$OVERLAY" \
+    -overlay "$OVERLAY_JSON" \
     -tags osusergo,netgo \
     -o "$OUTPUT_DIR/tailscaled" \
     -ldflags "${LDFLAGS}" \
@@ -68,7 +83,7 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
 
 echo "[INFO] Building tailscale (CLI)..."
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build \
-    -overlay "$OVERLAY" \
+    -overlay "$OVERLAY_JSON" \
     -tags osusergo,netgo \
     -o "$OUTPUT_DIR/tailscale" \
     -ldflags "${LDFLAGS}" \

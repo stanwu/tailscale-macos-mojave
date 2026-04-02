@@ -135,19 +135,20 @@ alias tailscale="/path/to/tailscale --socket=/var/run/tailscaled.sock"
 
 ```
 build_tailscale-1.76.3_macOS_mojave.sh  # Main build script
+Makefile                                # Build/deploy/verify targets
+overlay/                                # Go stdlib patches (tracked in git)
+  crypto/x509/internal/macos/
+    security.go                         # Patched: old API replacements
+    security.s                          # Patched: new assembly trampolines
+  crypto/x509/
+    root_darwin.go                      # Patched: count+index loop
+run_tailscale.sh                        # Startup helper for Mojave
+.github/workflows/build.yml            # CI: build + release on tag
 mojave_amd64/                           # Build output (git-ignored)
-  overlay.json                          # Go -overlay config
-  overlay/                              # Go stdlib patches for Mojave compat
-    crypto/x509/internal/macos/
-      security.go                       # Patched: old API replacements
-      security.s                        # Patched: new assembly trampolines
-    crypto/x509/
-      root_darwin.go                    # Patched: count+index loop
-  run_tailscale.sh                      # Startup script for Mojave
-  tailscale                             # 13MB CLI binary (Mach-O x86_64)
-  tailscaled                            # 22MB daemon binary (Mach-O x86_64)
 src/                                    # Cloned Tailscale source (git-ignored)
 ```
+
+> Note: `overlay.json` is generated at build time with correct absolute paths. It is not tracked in git to avoid leaking local filesystem paths.
 
 ## Key Lessons
 

@@ -2,7 +2,9 @@ VERSION     := v1.76.3
 REPO        := https://github.com/tailscale/tailscale.git
 SRC_DIR     := src/tailscale
 OUTPUT_DIR  := mojave_amd64
+OVERLAY_DIR := $(CURDIR)/overlay
 OVERLAY     := $(OUTPUT_DIR)/overlay.json
+GOROOT_SRC  := $(shell go env GOROOT)/src
 
 GOOS        := darwin
 GOARCH      := amd64
@@ -33,6 +35,14 @@ build: $(BINARIES)
 	@echo "=== Build complete ==="
 	@ls -lh $(BINARIES)
 	@file $(BINARIES)
+
+$(OVERLAY): $(wildcard $(OVERLAY_DIR)/crypto/x509/internal/macos/*) $(wildcard $(OVERLAY_DIR)/crypto/x509/*)
+	@mkdir -p $(OUTPUT_DIR)
+	@printf '{\n  "Replace": {\n    "%s/crypto/x509/internal/macos/security.go": "%s/crypto/x509/internal/macos/security.go",\n    "%s/crypto/x509/internal/macos/security.s": "%s/crypto/x509/internal/macos/security.s",\n    "%s/crypto/x509/root_darwin.go": "%s/crypto/x509/root_darwin.go"\n  }\n}\n' \
+		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" \
+		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" \
+		"$(GOROOT_SRC)" "$(OVERLAY_DIR)" > $@
+	@echo "[OK] Generated overlay.json"
 
 $(TAILSCALED): $(SRC_DIR)/go.mod $(OVERLAY)
 	@echo "[INFO] Building tailscaled (daemon)..."

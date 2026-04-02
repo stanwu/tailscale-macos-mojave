@@ -1,6 +1,9 @@
 # Build output
 mojave_amd64/
 
+# Generated overlay config (contains absolute paths)
+overlay.json
+
 # Cloned upstream source
 src/
 
