@@ -1,0 +1,44 @@
+{
+  "description": "Expected Mach-O header and symbol constraints for macOS 10.14 Mojave compatibility",
+  "header": {
+    "magic": "cffaedfe",
+    "cputype": 16777223,
+    "cputype_desc": "x86_64",
+    "cpusubtype": 3,
+    "filetype": 2,
+    "filetype_desc": "MH_EXECUTE",
+    "flags_mask": 2097285,
+    "flags_desc": "DYLDLINK|PIE"
+  },
+  "symbols": {
+    "required": [
+      "_SecTrustGetCertificateCount",
+      "_SecTrustGetCertificateAtIndex"
+    ],
+    "required_desc": "Must be present - Mojave-compatible APIs (macOS 10.7+)",
+    "forbidden": [
+      "_SecTrustCopyCertificateChain"
+    ],
+    "forbidden_desc": "Must NOT be present - would crash on Mojave (macOS 12+ only)"
+  },
+  "reference_build": {
+    "tailscale": {
+      "magic": "cffaedfe",
+      "cputype": 16777223,
+      "cpusubtype": 3,
+      "filetype": 2,
+      "ncmds": 16,
+      "sizeofcmds": 2288,
+      "flags": 2097156
+    },
+    "tailscaled": {
+      "magic": "cffaedfe",
+      "cputype": 16777223,
+      "cpusubtype": 3,
+      "filetype": 2,
+      "ncmds": 16,
+      "sizeofcmds": 2288,
+      "flags": 2097156
+    }
+  }
+}

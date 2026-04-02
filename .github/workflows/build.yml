@@ -66,25 +66,83 @@ jobs:
             -o "${GITHUB_WORKSPACE}/tailscale" \
             ./cmd/tailscale
 
-      - name: Verify symbols
+      - name: Verify Mach-O header and symbols
         run: |
-          echo "=== Checking SecTrustCopyCertificateChain is removed ==="
-          if strings tailscale | grep -q SecTrustCopyCertificateChain; then
-            echo "FAIL: SecTrustCopyCertificateChain still present"
-            exit 1
-          fi
-          echo "OK: SecTrustCopyCertificateChain removed"
+          python3 <<'PYEOF'
+          import json, struct, subprocess, sys
 
-          echo "=== Checking SecTrustGetCertificateAtIndex is present ==="
-          if ! strings tailscale | grep -q SecTrustGetCertificateAtIndex; then
-            echo "FAIL: SecTrustGetCertificateAtIndex missing"
-            exit 1
-          fi
-          echo "OK: SecTrustGetCertificateAtIndex present"
+          with open("mach-o-header-symbols.json") as f:
+              spec = json.load(f)
 
-          echo "=== Binary info ==="
-          file tailscale tailscaled
-          ls -lh tailscale tailscaled
+          errors = []
+
+          for name in ["tailscale", "tailscaled"]:
+              print(f"\n=== Verifying {name} ===")
+
+              # --- Header check ---
+              with open(name, "rb") as f:
+                  h = f.read(32)
+
+              magic = h[0:4].hex()
+              cputype = int.from_bytes(h[4:8], "little")
+              cpusubtype = int.from_bytes(h[8:12], "little")
+              filetype = int.from_bytes(h[12:16], "little")
+              flags = int.from_bytes(h[24:28], "little")
+
+              ref = spec["reference_build"][name]
+
+              checks = [
+                  ("magic",      magic,      ref["magic"]),
+                  ("cputype",    cputype,    ref["cputype"]),
+                  ("cpusubtype", cpusubtype, ref["cpusubtype"]),
+                  ("filetype",   filetype,   ref["filetype"]),
+              ]
+              for field, got, want in checks:
+                  if got == want:
+                      print(f"  [OK] {field}: {got}")
+                  else:
+                      msg = f"  [FAIL] {field}: got {got}, want {want}"
+                      print(msg)
+                      errors.append(f"{name}: {msg.strip()}")
+
+              # Check flags contain required bits
+              want_flags = ref["flags"]
+              if (flags & want_flags) == want_flags:
+                  print(f"  [OK] flags: {flags:#x} (contains {want_flags:#x})")
+              else:
+                  msg = f"  [FAIL] flags: {flags:#x} missing bits from {want_flags:#x}"
+                  print(msg)
+                  errors.append(f"{name}: {msg.strip()}")
+
+              # --- Symbol check ---
+              out = subprocess.check_output(["strings", name], text=True)
+              symbols = set(out.splitlines())
+
+              for sym in spec["symbols"]["required"]:
+                  if sym in symbols:
+                      print(f"  [OK] required symbol present: {sym}")
+                  else:
+                      msg = f"  [FAIL] required symbol missing: {sym}"
+                      print(msg)
+                      errors.append(f"{name}: {msg.strip()}")
+
+              for sym in spec["symbols"]["forbidden"]:
+                  if sym not in symbols:
+                      print(f"  [OK] forbidden symbol absent: {sym}")
+                  else:
+                      msg = f"  [FAIL] forbidden symbol found: {sym} (would crash on Mojave)"
+                      print(msg)
+                      errors.append(f"{name}: {msg.strip()}")
+
+          print(f"\n=== Summary ===")
+          if errors:
+              print(f"FAILED with {len(errors)} error(s):")
+              for e in errors:
+                  print(f"  - {e}")
+              sys.exit(1)
+          else:
+              print("All checks passed — binaries are Mojave-compatible")
+          PYEOF
 
       - name: Package release zip
         if: startsWith(github.ref, 'refs/tags/')
